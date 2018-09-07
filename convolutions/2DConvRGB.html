@@ -1,7 +1,7 @@
 <html>
 
 <head>
-    <title>3DConv</title>
+    <title>2DConv on RGB image</title>
     <style>
         body {
             margin: 0;
@@ -53,8 +53,8 @@
         }
 
         // Must render front and back cubes seperately to render correctly
-        var createTransparentCube = function(size, color, opacity, renderOrderBack=0, renderOrderFront=1) {
-            var geometry = new THREE.BoxGeometry(size, size, size);
+        var createTransparentBox = function(width, height, depth, color, opacity, renderOrderBack=0, renderOrderFront=1) {
+            var geometry = new THREE.BoxGeometry(width, height, depth);
             var material = new THREE.MeshLambertMaterial({ color: color, opacity: opacity, transparent: true });
             // create a group for both frontside and backside
             var cube = new THREE.Group();
@@ -71,39 +71,57 @@
             return cube
         }
 
-        var createKernel = function() {
-            var colors = [0xDAE1F1, 0x4E6FBF, 0xEAB48B, 0xDE8444, 0xB2CF94, 0x7DAB55, 0xFBE7A3, 0xFFC000]
-            var size = 2
+        var create2DKernel = function() {
+            var colors = [0x4E70BF, 0x7EAB56, 0xEB4D46]
+            var kernel_size = 3
+            var in_channels = 3
             var kernel = new THREE.Group();
             var color_counter = 0
-            for (x = 0; x < size; x++) {
-                for (y = 0; y < size; y++) {
-                    for (z = 0; z < size; z++) {
+            for (x = 0; x < kernel_size; x++) {
+                for (y = 0; y < kernel_size; y++) {
+                    for (z = 0; z < in_channels; z++) {
                         var cube = createCube(1, colors[color_counter % colors.length])
-                        color_counter += 1
                         cube.position.set(x, y, z);
                         kernel.add(cube)
                     }
+                    color_counter += 1
                 }
             }
             return kernel
         }
 
-        var createContainerCube = function(size, contents) {
-            var container = createTransparentCube(size, 0xffffff, 0.25)
+        var createRGBContainerBox = function(height, width, contents) {
+            var outer_rgb = new THREE.Group();
+            var containerR = createTransparentBox(height, 1, width, 0xEB4D46, 0.25)
+            var containerG = createTransparentBox(height, 1, width, 0x7EAB56, 0.25)
+            var containerB = createTransparentBox(height, 1, width, 0x4E70BF, 0.25)
+            containerR.translateY(2)
+            containerG.translateY(1)
+            containerB.translateY(0)
+            outer_rgb.add(containerR)
+            outer_rgb.add(containerG)
+            outer_rgb.add(containerB)
+
+            var container_cube = new THREE.Group();
+            container_cube.add(outer_rgb)
+            container_cube.add(contents)
+            return container_cube
+        }
+
+        var createContainerBox = function (height, width, depth, contents) {
+            var container = createTransparentBox(height, depth, width, 0xffffff, 0.25)
             var container_cube = new THREE.Group();
             container_cube.add(container)
             container_cube.add(contents)
             return container_cube
         }
 
-        function* windowPositionIterator(size) {
+
+        function* window2DPositionIterator(size) {
                 while (true) {
                     for (let z = 0; z < size; z += 1) {
-                        for (let y = 0; y < size; y += 1) {
-                            for (let x = 0; x < size; x += 1) {
-                                yield { x: x, y: y, z: z };
-                            }
+                        for (let x = 0; x < size; x += 1) {
+                            yield { x: x, y: 0, z: z };
                         }
                     }
                 }
@@ -131,27 +149,29 @@
         }
 
         inputLabel = createText("Input")
-        inputLabel.position.set(-0.5, 2, -3)
+        inputLabel.position.set(-1, 2, -3)
         scene.add(inputLabel)
 
         kernelLabel = createText("Kernel")
-        kernelLabel.position.set(4.5, 2, -2.1)
+        kernelLabel.position.set(5, 2, -2.1)
         scene.add(kernelLabel)
 
         outputLabel = createText("Output")
-        outputLabel.position.set(9, 2, -1.9)
+        outputLabel.position.set(10, 2, -1.9)
         scene.add(outputLabel)
 
-        window_kernel = createKernel()
-        input_array = createContainerCube(4, window_kernel)
-        input_array.position.set(-5, 0, 0);
 
-        kernel = createKernel()
-        kernel.position.set(0, -0.5, -0.5);
+
+        window_kernel = create2DKernel()
+        input_array = createRGBContainerBox(5, 5, window_kernel)
+        input_array.position.set(-5, 0, 1);
+
+        kernel = create2DKernel()
+        kernel.position.set(0, 0, 0);
 
         result = createCube(1, 0x808080)
-        output_array = createContainerCube(3, result)
-        output_array.position.set(5, 0, 0);
+        output_array = createContainerBox(3, 3, 1, result)
+        output_array.position.set(6, 1, 1);
 
         scene.add(input_array)
         scene.add(kernel)
@@ -159,7 +179,7 @@
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
 
-        var it = windowPositionIterator(3);
+        var it = window2DPositionIterator(3);
         var counter = 0
         var animate = function () {
             counter += 1
@@ -168,12 +188,10 @@
 
             if (counter % 40 == 0) {
                 result = it.next();
-                input_array.children[1].position.x = result.value.x * 1 - 1.5;
-                input_array.children[1].position.y = result.value.z * 1 - 1.5;
-                input_array.children[1].position.z = result.value.y * 1 - 1.5;
+                input_array.children[1].position.x = result.value.x * 1 - 2;
+                input_array.children[1].position.z = result.value.z * 1 - 2;
                 output_array.children[1].position.x = result.value.x * 1 - 1;
-                output_array.children[1].position.y = result.value.z * 1 - 1;
-                output_array.children[1].position.z = result.value.y * 1 - 1;
+                output_array.children[1].position.z = result.value.z * 1 - 1;
             }
             renderer.render(scene, camera);
 
